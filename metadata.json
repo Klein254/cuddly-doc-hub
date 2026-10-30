@@ -1,0 +1,8 @@
+{
+  "name": "Vector Technical Website",
+  "description": "Company website for Vector Technical Maintenance & General Supplies, featuring dynamic pages and a contact form.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
