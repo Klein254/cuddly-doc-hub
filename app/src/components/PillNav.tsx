@@ -24,7 +24,7 @@ export function PillNav({ active }: { active: string }) {
       <header className="sticky top-0 z-40 hidden px-4 pt-4 md:block">
         <nav className="glass-strong mx-auto flex max-w-6xl items-center gap-2 rounded-full p-1.5 pl-5">
           <button onClick={() => go('')} className="mr-2 shrink-0" aria-label="Overview">
-            <Logo className="h-9 w-auto" />
+            <Logo className="-my-1.5 h-12 w-auto" />
           </button>
           <ul className="flex flex-1 items-center justify-center gap-0.5">
             {ITEMS.map((it) => {
@@ -57,7 +57,7 @@ export function PillNav({ active }: { active: string }) {
       {/* phone: compact top bar + bottom pill */}
       <header className="sticky top-0 z-40 px-3 pt-[max(0.75rem,var(--safe-area-inset-top,env(safe-area-inset-top)))] md:hidden">
         <div className="glass-strong flex items-center justify-between rounded-full py-1.5 pl-4 pr-1.5">
-          <Logo className="h-7 w-auto" />
+          <Logo className="-my-1.5 h-11 w-auto" />
           <SyncBadge />
         </div>
       </header>

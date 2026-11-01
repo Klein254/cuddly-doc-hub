@@ -1,7 +1,11 @@
-import { Circle, Document, Page, Path, Rect, StyleSheet, Svg, Text, View } from '@react-pdf/renderer';
+import { Circle, Document, Image, Page, Path, Rect, StyleSheet, Svg, Text, View } from '@react-pdf/renderer';
+import logoArt from '../assets/logo-art.png';
 import { fmtDateLong, fmtDateShort, fmtMoney, rowTotal, totals } from '../lib/format';
 import { DOC_META, type DocRecord, type Settings } from '../lib/types';
 import { C, F } from './theme';
+
+const LOGO_W = 1055;
+const LOGO_H = 422;
 
 const s = StyleSheet.create({
   page: { fontFamily: F.sans, fontSize: 9, color: C.body, backgroundColor: C.white, paddingTop: 46, paddingHorizontal: 50, paddingBottom: 74 },
@@ -11,48 +15,32 @@ const s = StyleSheet.create({
 
 // ------------------------------------------------------------------ logo
 
-/** The Vector Technical mark: amber bracket frame broken by the wordmark, tagline in orange. */
-export function PdfLogo({ width = 200, dark = false }: { width?: number; dark?: boolean }) {
-  const h = width * 0.55;
-  const stroke = Math.max(1.5, width * 0.022);
-  const bracket = { position: 'absolute' as const, left: 0, right: 0, borderColor: C.amber, borderLeftWidth: stroke, borderRightWidth: stroke };
+/**
+ * The Vector Technical logo: the original frame and tagline artwork, with the wordmark set in Montserrat
+ * across the gap in the frame (the source artwork has the wordmark in black on black, so it can't be used as-is).
+ */
+export function PdfLogo({ width = 230, dark = false }: { width?: number; dark?: boolean }) {
+  const h = (width * LOGO_H) / LOGO_W;
+  const fs = width * 0.0915;
   return (
-    <View style={{ width: width * 1.36, height: h, alignItems: 'center' }}>
-      <View style={{ width, height: h, position: 'relative' }}>
-        <View style={{ ...bracket, top: 0, height: h * 0.38, borderTopWidth: stroke }} />
-        <View style={{ ...bracket, bottom: 0, height: h * 0.4, borderBottomWidth: stroke }} />
-      </View>
+    <View style={{ width, height: h, position: 'relative' }}>
+      <Image src={logoArt} style={{ width, height: h }} />
       <Text
+        wrap={false}
         style={{
           position: 'absolute',
-          left: 0,
-          right: 0,
-          top: h * 0.355,
+          left: -width,
+          right: -width,
+          top: (h * 207) / LOGO_H - fs * 0.618,
           textAlign: 'center',
           fontFamily: F.brand,
           fontWeight: 800,
-          fontSize: width * 0.128,
-          letterSpacing: -width * 0.0015,
+          fontSize: fs,
+          letterSpacing: 0,
           color: dark ? C.white : C.ink,
         }}
       >
         VECTOR TECHNICAL
-      </Text>
-      <Text
-        style={{
-          position: 'absolute',
-          left: 0,
-          right: 0,
-          top: h * 0.655,
-          textAlign: 'center',
-          fontFamily: F.brand,
-          fontWeight: 600,
-          fontSize: width * 0.036,
-          letterSpacing: width * 0.0058,
-          color: C.orange,
-        }}
-      >
-        MAINTENANCE &amp; GENERAL SUPPLIES
       </Text>
     </View>
   );
@@ -105,7 +93,7 @@ function Cover({ doc, co }: { doc: DocRecord; co: Settings }) {
   return (
     <Page size="A4" style={{ fontFamily: F.sans, backgroundColor: C.white, position: 'relative' }}>
       <View style={{ alignItems: 'center', marginTop: 84 }}>
-        <PdfLogo width={170} />
+        <PdfLogo width={232} />
       </View>
 
       <View style={{ marginTop: 150, paddingHorizontal: 72 }}>
