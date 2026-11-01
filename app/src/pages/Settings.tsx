@@ -1,6 +1,7 @@
 import { CloudOff, Download, LogOut, RefreshCw } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Button, Card, CardTitle, Label, NumberInput } from '../components/ui';
+import { isNativeApp } from '../lib/platform';
 import { signOut, syncNow, updateSettings, useSettings, useSync } from '../lib/store';
 import type { Settings as S } from '../lib/types';
 
@@ -56,7 +57,12 @@ export function Settings() {
                 <label key={f.key} className={f.wide ? 'sm:col-span-2' : undefined}>
                   <Label hint={f.hint}>{f.label}</Label>
                   {f.area ? (
-                    <textarea className="field min-h-[4rem] [field-sizing:content]" rows={2} value={settings[f.key] as string} onChange={(e) => updateSettings({ [f.key]: e.target.value })} />
+                    <textarea
+                      className="field min-h-[4rem] [field-sizing:content]"
+                      rows={2}
+                      value={settings[f.key] as string}
+                      onChange={(e) => updateSettings({ [f.key]: e.target.value })}
+                    />
                   ) : (
                     <input className="field" value={settings[f.key] as string} onChange={(e) => updateSettings({ [f.key]: e.target.value })} />
                   )}
@@ -70,7 +76,11 @@ export function Settings() {
             <div className="grid gap-4 sm:grid-cols-2">
               <label>
                 <Label hint="new documents only">Number prefix</Label>
-                <input className="field uppercase" value={settings.prefix} onChange={(e) => updateSettings({ prefix: e.target.value.toUpperCase().replace(/[^A-Z0-9-]/g, '') })} />
+                <input
+                  className="field uppercase"
+                  value={settings.prefix}
+                  onChange={(e) => updateSettings({ prefix: e.target.value.toUpperCase().replace(/[^A-Z0-9-]/g, '') })}
+                />
               </label>
               <label>
                 <Label>VAT rate (%)</Label>
@@ -78,7 +88,12 @@ export function Settings() {
               </label>
               <label>
                 <Label>Authorized name</Label>
-                <input className="field" placeholder="Pre-filled on new documents" value={settings.authorizedName} onChange={(e) => updateSettings({ authorizedName: e.target.value })} />
+                <input
+                  className="field"
+                  placeholder="Pre-filled on new documents"
+                  value={settings.authorizedName}
+                  onChange={(e) => updateSettings({ authorizedName: e.target.value })}
+                />
               </label>
               <label>
                 <Label hint="statements">Sign-off</Label>
@@ -95,8 +110,8 @@ export function Settings() {
               <div className="flex gap-3 text-sm text-white/60">
                 <CloudOff className="mt-0.5 size-5 shrink-0 text-white/40" />
                 <p>
-                  Documents are saved on this device only. Add your Supabase keys to <code className="text-amber-200/80">.env</code> to sync across every phone and computer
-                  (see README).
+                  Documents are saved on this device only. Add your Supabase keys to <code className="text-amber-200/80">.env</code> to sync across every phone
+                  and computer (see README).
                 </p>
               </div>
             ) : (
@@ -138,28 +153,30 @@ export function Settings() {
             )}
           </Card>
 
-          <Card className="p-4 md:p-6">
-            <CardTitle>Install app</CardTitle>
-            {standalone ? (
-              <p className="text-sm text-white/60">Installed. You&apos;re running Doc Hub as an app.</p>
-            ) : canInstall ? (
-              <Button variant="primary" onClick={install}>
-                <Download className="size-4" /> Install Doc Hub
-              </Button>
-            ) : (
-              <ul className="space-y-2 text-sm text-white/60">
-                <li>
-                  <span className="text-white/85">Windows / Mac (Chrome or Edge):</span> click the install icon at the right of the address bar.
-                </li>
-                <li>
-                  <span className="text-white/85">Android (Chrome):</span> menu ⋮ → <em>Add to Home screen</em> → <em>Install</em>.
-                </li>
-                <li>
-                  <span className="text-white/85">Mac Safari:</span> File → <em>Add to Dock</em>.
-                </li>
-              </ul>
-            )}
-          </Card>
+          {!isNativeApp && (
+            <Card className="p-4 md:p-6">
+              <CardTitle>Install app</CardTitle>
+              {standalone ? (
+                <p className="text-sm text-white/60">Installed. You&apos;re running Doc Hub as an app.</p>
+              ) : canInstall ? (
+                <Button variant="primary" onClick={install}>
+                  <Download className="size-4" /> Install Doc Hub
+                </Button>
+              ) : (
+                <ul className="space-y-2 text-sm text-white/60">
+                  <li>
+                    <span className="text-white/85">Windows / Mac (Chrome or Edge):</span> click the install icon at the right of the address bar.
+                  </li>
+                  <li>
+                    <span className="text-white/85">Android (Chrome):</span> menu ⋮ → <em>Add to Home screen</em> → <em>Install</em>.
+                  </li>
+                  <li>
+                    <span className="text-white/85">Mac Safari:</span> File → <em>Add to Dock</em>.
+                  </li>
+                </ul>
+              )}
+            </Card>
+          )}
         </div>
       </div>
     </div>

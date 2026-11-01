@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Vector Doc Hub</string>
+    <string name="title_activity_main">Vector Doc Hub</string>
+    <string name="package_name">com.vectortechnical.dochub</string>
+    <string name="custom_url_scheme">com.vectortechnical.dochub</string>
+</resources>

@@ -1,9 +1,12 @@
 # Vector Doc Hub
 
-Quotations, invoices, delivery notes and statements of accounts for Vector Technical. It runs as an installable app on Windows, Mac and Android, and works offline.
+Quotations, invoices, delivery notes and statements of accounts for Vector Technical. It ships as a native app for Windows (.exe/.msi), macOS (.dmg) and Android (.apk), plus a website version, and works offline.
 
 - **Live sync.** Every change is saved on the device straight away and uploaded within a second. Other devices see it immediately. Offline edits upload automatically when the connection returns.
-- **PDFs everywhere.** PDFs are generated on the device with real, selectable text. On Windows/Mac (Chrome or Edge) *Save PDF* opens a "Save as" dialog; on Android and other browsers it goes to Downloads, and *Share* sends it to WhatsApp, Gmail, Drive and similar apps.
+- **PDFs everywhere.** PDFs are generated on the device with real, selectable text, so they look identical on every machine.
+  - Windows / Mac app: *Save PDF* opens the system "Save as" dialog.
+  - Android app: *Save PDF* writes to **Documents/Vector Doc Hub**; *Share* sends it to WhatsApp, Gmail, Drive and similar apps.
+  - Website: "Save as" dialog in Chrome/Edge on a computer, otherwise Downloads.
 
 ## Run it
 
@@ -28,7 +31,34 @@ Without Supabase keys the app runs in **local-only mode**: everything is stored 
 
 Only signed-in users whose email is in `team_members` can read or write documents.
 
-## Deploy and install
+## Get the installers
+
+GitHub builds them automatically ([`.github/workflows/apps.yml`](../.github/workflows/apps.yml)) whenever `app/` changes on `main`:
+
+1. Open the repository on GitHub → **Actions** → the latest **Build apps** run.
+2. Under **Artifacts**, download *Vector-Doc-Hub-Windows*, *-macOS* or *-Android*.
+
+To publish a proper download page, tag a version: `git tag v1.0.0 && git push origin v1.0.0`. The files then appear under **Releases**.
+
+For the apps to sync, add `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` as repository secrets (**Settings → Secrets and variables → Actions**) before building.
+
+The installers are not code-signed yet, so the first launch shows a warning:
+
+- **Windows:** "Windows protected your PC" → *More info* → *Run anyway*.
+- **Mac:** open the app once, then **System Settings → Privacy & Security** → *Open Anyway*.
+- **Android:** allow *Install unknown apps* for the browser or file manager you open the APK from.
+
+### Build them yourself
+
+| Platform | Needs | Command (in `app/`) |
+| --- | --- | --- |
+| Android | Android Studio (JDK 21 + SDK) | `npm run build && npx cap sync android`, then `cd android && gradlew assembleDebug` → `android/app/build/outputs/apk/debug/app-debug.apk` |
+| Windows | [Rust](https://rustup.rs) + Visual Studio C++ build tools | `npx tauri build` → `src-tauri/target/release/bundle/` |
+| macOS | Rust + Xcode command line tools, on a Mac | `npx tauri build` → `src-tauri/target/release/bundle/dmg/` |
+
+`npx tauri dev` runs the desktop app with live reload.
+
+## Website version
 
 ```bash
 npm run build      # output in app/dist
@@ -50,3 +80,6 @@ Settings → *Install app* shows the same steps inside the app.
 | `src/pdf/DocumentPdf.tsx` | The document designs (cover page + body for all four types) |
 | `src/pages/Editor.tsx` | The document editor with live PDF preview |
 | `supabase/schema.sql` | Database tables, access rules, realtime |
+| `src/lib/pdf.tsx` | Saving and sharing PDFs (desktop app, Android app and browser) |
+| `src-tauri/` | Windows / Mac app shell (Tauri) |
+| `android/` | Android app shell (Capacitor) |

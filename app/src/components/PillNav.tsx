@@ -55,7 +55,7 @@ export function PillNav({ active }: { active: string }) {
       </header>
 
       {/* phone: compact top bar + bottom pill */}
-      <header className="sticky top-0 z-40 px-3 pt-[max(0.75rem,env(safe-area-inset-top))] md:hidden">
+      <header className="sticky top-0 z-40 px-3 pt-[max(0.75rem,var(--safe-area-inset-top,env(safe-area-inset-top)))] md:hidden">
         <div className="glass-strong flex items-center justify-between rounded-full py-1.5 pl-4 pr-1.5">
           <Logo className="h-7 w-auto" />
           <SyncBadge />

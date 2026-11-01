@@ -53,8 +53,8 @@ export function Editor({ id }: { id: string }) {
   const onSave = async () => {
     setBusy('save');
     try {
-      const r = await savePdf(await freshBlob(), fileName(doc));
-      if (r !== 'cancelled') toast(r === 'saved' ? 'PDF saved' : 'PDF downloaded');
+      const msg = await savePdf(await freshBlob(), fileName(doc));
+      if (msg) toast(msg);
     } catch (e) {
       toast('Could not create the PDF: ' + (e as Error).message);
     } finally {
