@@ -4,10 +4,8 @@ const money = new Intl.NumberFormat('en-KE', { minimumFractionDigits: 2, maximum
 
 export const fmtMoney = (n: number) => money.format(Number.isFinite(n) ? n : 0);
 
-export const todayISO = () => {
-  const d = new Date();
-  return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
-};
+/** Local calendar date as "YYYY-MM-DD" (today, or the given moment). */
+export const todayISO = (d = new Date()) => new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
 
 /** "2026-07-17" → "17 July 2026" */
 export function fmtDateLong(iso: string) {
@@ -52,6 +50,37 @@ export function totals(data: DocData, type: DocType) {
   const subtotal = data.items.reduce((s, i) => s + (i.qty || 0) * (i.unitPrice || 0), 0);
   const vat = data.vatEnabled ? Math.round(subtotal * data.vatRate) / 100 : 0;
   return { subtotal, vat, total: subtotal + vat };
+}
+
+/** "2026-11-19T11:32:00Z" → "19 Nov 2026, 14:32" (local time) */
+export function fmtDateTime(iso: string) {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return `${d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}, ${d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}`;
+}
+
+/**
+ * Short fingerprint of everything a signature vouches for (recipient, date, lines, amounts, notes), so the
+ * editor can tell when a signed document was changed afterwards. Not a security measure.
+ */
+export function contentHash(data: DocData) {
+  const key = JSON.stringify([
+    data.to.trim(),
+    data.toAddress.trim(),
+    data.date,
+    data.subject.trim(),
+    data.items.map((i) => [i.qty, i.description.trim(), i.unitPrice]),
+    data.rows.map((r) => [r.date, r.lpo, r.invoiceNo, r.deliveryNo, r.amount, r.vat]),
+    data.vatEnabled,
+    data.vatRate,
+    data.notes.trim(),
+  ]);
+  let h = 0x811c9dc5;
+  for (let i = 0; i < key.length; i++) {
+    h ^= key.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return (h >>> 0).toString(36);
 }
 
 export const uid = () =>

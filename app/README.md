@@ -2,8 +2,9 @@
 
 Quotations, invoices, delivery notes and statements of accounts for Vector Technical. It ships as a native app for Windows (.exe/.msi), macOS (.dmg) and Android (.apk), plus a website version, and works offline.
 
-- **Live sync.** Every change is saved on the device straight away and uploaded within a second. Other devices see it immediately. Offline edits upload automatically when the connection returns.
-- **PDFs everywhere.** PDFs are generated on the device with real, selectable text, so they look identical on every machine.
+- **Live sync.** Every change is saved on the device straight away and uploaded within a second through Firebase (or Supabase). Other devices see it immediately. Offline edits upload automatically when the connection returns.
+- **Signed in person.** Clients, receivers and the authorized signatory sign on the phone, tablet or computer screen. The signature, name and time are drawn onto the PDF. Signing a delivery note marks it delivered; a client signing a quotation marks it accepted. If the document changes after signing, the editor flags it.
+- **PDFs everywhere.** PDFs are generated on the device with real, selectable text, so they look identical on every machine. Long part numbers and references wrap inside their table cells.
   - Windows / Mac app: *Save PDF* opens the system "Save as" dialog.
   - Android app: *Save PDF* writes to **Documents/Vector Doc Hub**; *Share* sends it to WhatsApp, Gmail, Drive and similar apps.
   - Website: "Save as" dialog in Chrome/Edge on a computer, otherwise Downloads.
@@ -16,9 +17,15 @@ npm install
 npm run dev        # http://localhost:5173
 ```
 
-Without Supabase keys the app runs in **local-only mode**: everything is stored in that browser. Add the keys (below) to sync across devices. Anything created locally uploads the first time you sign in.
+Without cloud keys the app runs in **local-only mode**: everything is stored on that device. Add keys (below) to sync across devices. Anything created locally uploads the first time you sign in.
 
-## Turn on sync (Supabase, free tier is enough)
+Press **Ctrl+K** (⌘K on a Mac) anywhere to search documents or create a new one.
+
+## Turn on sync with Firebase (recommended)
+
+Follow **[FIREBASE.md](FIREBASE.md)**. In short: create a Firebase project, enable Email/Password sign-in, create a Firestore database, publish [`firestore.rules`](firestore.rules), list your staff emails in a `team_members` collection, and put the web app keys in `app/.env`.
+
+## Or sync with Supabase
 
 1. Create a project at [supabase.com](https://supabase.com).
 2. **SQL Editor** → paste and run [`supabase/schema.sql`](supabase/schema.sql).
@@ -40,7 +47,7 @@ GitHub builds them automatically ([`.github/workflows/apps.yml`](../.github/work
 
 To publish a proper download page, tag a version: `git tag v1.0.0 && git push origin v1.0.0`. The files then appear under **Releases**.
 
-For the apps to sync, add `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` as repository secrets (**Settings → Secrets and variables → Actions**) before building.
+For the apps to sync, add your keys as repository secrets (**Settings → Secrets and variables → Actions**) before building: `VITE_FIREBASE_API_KEY`, `VITE_FIREBASE_AUTH_DOMAIN`, `VITE_FIREBASE_PROJECT_ID` and `VITE_FIREBASE_APP_ID` for Firebase, or `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` for Supabase.
 
 The installers are not code-signed yet, so the first launch shows a warning:
 
@@ -64,7 +71,7 @@ The installers are not code-signed yet, so the first launch shows a warning:
 npm run build      # output in app/dist
 ```
 
-Host `dist/` on any static host (Vercel, Netlify, Cloudflare Pages). Set the two `VITE_SUPABASE_*` variables in the host's settings. Then open the site and:
+Host `dist/` on any static host (Vercel, Netlify, Cloudflare Pages, Firebase Hosting). Set the same `VITE_FIREBASE_*` (or `VITE_SUPABASE_*`) variables in the host's settings. Then open the site and:
 
 - **Windows / Mac (Chrome or Edge):** click the install icon in the address bar.
 - **Android (Chrome):** menu ⋮ → *Add to Home screen* → *Install*.
@@ -76,10 +83,15 @@ Settings → *Install app* shows the same steps inside the app.
 
 | Path | What |
 | --- | --- |
-| `src/lib/store.ts` | Local storage (IndexedDB), upload queue, realtime sync, numbering |
-| `src/pdf/DocumentPdf.tsx` | The document designs (cover page + body for all four types) |
-| `src/pages/Editor.tsx` | The document editor with live PDF preview |
-| `supabase/schema.sql` | Database tables, access rules, realtime |
+| `src/lib/store.ts` | Local storage (IndexedDB), upload queue, live sync, numbering |
+| `src/lib/cloud-firebase.ts` | Firebase sign-in, uploads and live updates (`cloud-supabase.ts` for Supabase) |
+| `src/pdf/DocumentPdf.tsx` | The document designs (cover page + body for all four types), signatures, cell wrapping |
+| `src/pages/Editor.tsx` | The document editor with live PDF preview and signature slots |
+| `src/components/SignaturePad.tsx` | The on-screen signature pad |
+| `src/components/Shell.tsx` | Sidebar (desktop) and top bar + tab bar (phone) |
+| `src/index.css` | Design tokens: colours for light and dark, type, spacing |
+| `firestore.rules` | Firestore access rules |
+| `supabase/schema.sql` | Supabase tables, access rules, realtime |
 | `src/lib/pdf.tsx` | Saving and sharing PDFs (desktop app, Android app and browser) |
 | `src-tauri/` | Windows / Mac app shell (Tauri) |
 | `android/` | Android app shell (Capacitor) |

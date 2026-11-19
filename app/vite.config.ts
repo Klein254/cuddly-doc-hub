@@ -14,8 +14,8 @@ export default defineConfig({
         name: 'Vector Doc Hub',
         short_name: 'Doc Hub',
         description: 'Quotations, invoices, delivery notes and statements for Vector Technical.',
-        theme_color: '#0b0c0f',
-        background_color: '#0b0c0f',
+        theme_color: '#f6f5f2',
+        background_color: '#f6f5f2',
         display: 'standalone',
         start_url: '/',
         icons: [

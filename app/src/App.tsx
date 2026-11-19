@@ -1,4 +1,7 @@
-import { PillNav } from './components/PillNav';
+import { MotionConfig, motion } from 'motion/react';
+import { useEffect } from 'react';
+import { CommandPalette } from './components/CommandPalette';
+import { Shell } from './components/Shell';
 import { Toaster } from './components/ui';
 import { useRoute } from './lib/router';
 import { useStore, useSync } from './lib/store';
@@ -16,14 +19,19 @@ export function App() {
   // Keep the document's section lit in the nav while editing it.
   const editingType = useStore((s) => (head === 'doc' ? s.docs.find((d) => d.id === id)?.type : undefined));
 
-  if (!sync.ready) return <div className="app-bg" />;
+  // Each page starts at the top.
+  useEffect(() => {
+    document.getElementById('main')?.scrollTo(0, 0);
+    window.scrollTo(0, 0);
+  }, [route]);
 
-  if (sync.mode === 'cloud' && !sync.session) {
+  if (!sync.ready) return null;
+
+  if (sync.mode === 'cloud' && !sync.user) {
     return (
-      <>
-        <div className="app-bg" />
+      <MotionConfig reducedMotion="user">
         <Login />
-      </>
+      </MotionConfig>
     );
   }
 
@@ -42,11 +50,15 @@ export function App() {
   }
 
   return (
-    <>
-      <div className="app-bg" />
-      <PillNav active={active} />
-      <main className="mx-auto max-w-6xl px-3 pb-32 pt-4 md:px-4 md:pb-16 md:pt-6">{page}</main>
+    <MotionConfig reducedMotion="user">
+      <Shell active={active}>
+        {/* Pages ease in: a short rise and fade, like a sheet settling into place. */}
+        <motion.div key={route} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}>
+          {page}
+        </motion.div>
+      </Shell>
+      <CommandPalette />
       <Toaster />
-    </>
+    </MotionConfig>
   );
 }

@@ -18,6 +18,21 @@ export interface StatementRow {
   vat: number;
 }
 
+/** Who a signature belongs to: the company (authorized), the person receiving goods, or a client accepting a quotation. */
+export type SignatureRole = 'authorized' | 'receiver' | 'client';
+
+/** A signature drawn by hand on the device, stored as vector strokes so it stays sharp in the PDF and small to sync. */
+export interface Signature {
+  /** SVG path data, one entry per stroke, in the coordinate space of `box`. */
+  paths: string[];
+  /** Crop box around the strokes: [x, y, width, height]. */
+  box: [number, number, number, number];
+  name: string;
+  signedAt: string;
+  /** Fingerprint of the document's contents when it was signed, to flag later edits. */
+  contentHash: string;
+}
+
 export interface DocData {
   to: string;
   toAddress: string;
@@ -31,7 +46,22 @@ export interface DocData {
   authorizedName: string;
   includeCover: boolean;
   status: DocStatus;
+  /** Optional: documents created before signatures existed don't have it. */
+  signatures?: Partial<Record<SignatureRole, Signature>>;
 }
+
+export const SIGNATURE_ROLES: Record<DocType, SignatureRole[]> = {
+  quotation: ['authorized', 'client'],
+  invoice: ['authorized'],
+  delivery: ['authorized', 'receiver'],
+  statement: ['authorized'],
+};
+
+export const SIGNATURE_META: Record<SignatureRole, { label: string; who: string; consent: (company: string) => string }> = {
+  authorized: { label: 'Authorized signature', who: 'the authorized signatory', consent: (co) => `Signed on behalf of ${co}.` },
+  receiver: { label: 'Received by', who: 'the person receiving the goods', consent: () => 'I confirm the goods listed were received in good order and condition.' },
+  client: { label: 'Client acceptance', who: 'the client', consent: () => 'I accept this quotation and its conditions.' },
+};
 
 export interface DocRecord {
   id: string;

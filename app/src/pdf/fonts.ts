@@ -23,6 +23,6 @@ export function registerFonts() {
       fonts: fonts.map((f) => ({ src: urls[`/node_modules/@fontsource/${f.file}`], fontWeight: f.weight, fontStyle: f.style ?? 'normal' })),
     });
   }
-  // Keep long words (part numbers, emails) intact instead of hyphenating them.
+  // Ordinary words are never hyphenated. Long codes in table cells get break points from `breakable` in DocumentPdf.
   Font.registerHyphenationCallback((word) => [word]);
 }

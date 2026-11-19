@@ -1,0 +1,35 @@
+rules_version = '2';
+
+// Vector Doc Hub: only signed-in staff whose email is listed in team_members can read or write.
+// Paste into Firebase console → Firestore Database → Rules → Publish
+// (or run `npx firebase-tools deploy --only firestore:rules` from the app folder).
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isTeam() {
+      return request.auth != null
+        && request.auth.token.email != null
+        && exists(/databases/$(database)/documents/team_members/$(request.auth.token.email.lower()));
+    }
+
+    // One per document. Deleting is a flag (deleted: true), so hard deletes are not allowed.
+    match /documents/{id} {
+      allow read, create, update: if isTeam();
+    }
+
+    // Claimed document numbers (type_year_seq → docId), so two devices can't issue the same number.
+    match /numbers/{key} {
+      allow read, create, delete: if isTeam();
+    }
+
+    // Company details, numbering prefix, VAT rate.
+    match /settings/{id} {
+      allow read, write: if isTeam();
+    }
+
+    // Managed in the console only. A user may check their own entry.
+    match /team_members/{email} {
+      allow read: if request.auth != null && request.auth.token.email.lower() == email;
+    }
+  }
+}

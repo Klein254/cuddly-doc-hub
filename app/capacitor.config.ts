@@ -4,13 +4,13 @@ const config: CapacitorConfig = {
   appId: 'com.vectortechnical.dochub',
   appName: 'Vector Doc Hub',
   webDir: 'dist',
-  backgroundColor: '#07080a',
+  backgroundColor: '#f6f5f2',
   android: {
-    backgroundColor: '#07080a',
+    backgroundColor: '#f6f5f2',
   },
   plugins: {
-    // Light status-bar icons over the dark app; safe-area sizes exposed to CSS as --safe-area-inset-*.
-    SystemBars: { style: 'DARK', insetsHandling: 'css' },
+    // Status-bar icons follow the app theme (set at runtime in src/lib/theme.ts); safe-area sizes exposed to CSS as --safe-area-inset-*.
+    SystemBars: { style: 'DEFAULT', insetsHandling: 'css' },
   },
 };
 

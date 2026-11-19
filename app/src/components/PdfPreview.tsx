@@ -28,7 +28,7 @@ export function PdfPreview({ blob }: { blob: Blob | null }) {
           canvas.width = viewport.width;
           canvas.height = viewport.height;
           canvas.style.width = '100%';
-          canvas.className = 'rounded-md bg-white shadow-[0_30px_60px_-25px_rgba(0,0,0,0.9)] ring-1 ring-white/10';
+          canvas.className = 'mx-auto max-w-[44rem] rounded-[3px] bg-white shadow-paper';
           await page.render({ canvas, canvasContext: canvas.getContext('2d')!, viewport }).promise;
           canvases.push(canvas);
           if (cancelled) return;
@@ -48,9 +48,9 @@ export function PdfPreview({ blob }: { blob: Blob | null }) {
 
   return (
     <div>
-      <div ref={host} className="flex flex-col gap-5" />
-      {!blob && <div className="aspect-[1/1.414] animate-pulse rounded-md bg-white/[0.04]" />}
-      {error && <p className="mt-3 text-sm text-red-300">Preview failed: {error}</p>}
+      <div ref={host} className="flex flex-col gap-6" />
+      {!blob && <div className="mx-auto aspect-[1/1.414] max-w-[44rem] animate-pulse rounded-[3px] bg-surface shadow-paper" />}
+      {error && <p className="mt-3 text-sm text-red-600 dark:text-red-400">Preview failed: {error}</p>}
     </div>
   );
 }

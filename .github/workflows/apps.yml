@@ -4,7 +4,10 @@
 # Pushing a tag such as v1.0.0 also publishes them on the repository's Releases page.
 #
 # Optional repository secrets (Settings → Secrets and variables → Actions):
-#   VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY  → apps sync to your database (otherwise they store on the device only)
+#   VITE_FIREBASE_API_KEY, VITE_FIREBASE_AUTH_DOMAIN, VITE_FIREBASE_PROJECT_ID, VITE_FIREBASE_APP_ID
+#                                               → apps sync through Firebase (see app/FIREBASE.md)
+#   VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY  → or sync through Supabase instead
+#                                               (with neither, the apps store on the device only)
 #   ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD
 #                                               → signed release APK (otherwise a debug-signed APK)
 
@@ -21,6 +24,10 @@ permissions:
   contents: write
 
 env:
+  VITE_FIREBASE_API_KEY: ${{ secrets.VITE_FIREBASE_API_KEY }}
+  VITE_FIREBASE_AUTH_DOMAIN: ${{ secrets.VITE_FIREBASE_AUTH_DOMAIN }}
+  VITE_FIREBASE_PROJECT_ID: ${{ secrets.VITE_FIREBASE_PROJECT_ID }}
+  VITE_FIREBASE_APP_ID: ${{ secrets.VITE_FIREBASE_APP_ID }}
   VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
   VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
 

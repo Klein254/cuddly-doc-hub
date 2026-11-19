@@ -1,22 +1,22 @@
 /**
  * Local-first document store with live cloud sync.
  *
- * Every edit is written to IndexedDB straight away and queued in an outbox. The outbox is pushed
- * to Supabase shortly after (and again whenever the device comes back online). Changes made on
- * other devices arrive through a realtime subscription, and a full pull runs on start-up and on
- * every reconnect. Conflicts resolve last-write-wins on updated_at.
+ * Every edit is written to IndexedDB straight away and queued in an outbox. The outbox is pushed to the
+ * cloud backend (Firebase or Supabase, see cloud.ts) shortly after, and again whenever the device comes
+ * back online. Changes made on other devices arrive through a live subscription. Conflicts resolve
+ * last-write-wins on updated_at.
  */
-import type { RealtimeChannel, Session } from '@supabase/supabase-js';
 import { clear, createStore, del, entries, get, set } from 'idb-keyval';
 import { useSyncExternalStore } from 'react';
+import { cloudKind, cloudTarget, loadBackend, type CloudBackend, type CloudUser, type RemoteSettings } from './cloud';
 import { docNumber, todayISO, uid } from './format';
-import { supabase } from './supabase';
 import { DEFAULT_NOTES, DEFAULT_SETTINGS, type DocData, type DocRecord, type DocType, type Settings } from './types';
 
 export interface SyncState {
   ready: boolean;
   mode: 'local' | 'cloud';
-  session: Session | null;
+  backend: CloudBackend['kind'] | null;
+  user: CloudUser | null;
   online: boolean;
   phase: 'idle' | 'syncing' | 'error';
   pending: number;
@@ -37,10 +37,12 @@ const docs = new Map<string, DocRecord>();
 let settings: Settings = { ...DEFAULT_SETTINGS };
 const outbox = new Set<string>();
 let settingsDirty = false;
+let backend: CloudBackend | null = null;
 let sync: SyncState = {
   ready: false,
-  mode: supabase ? 'cloud' : 'local',
-  session: null,
+  mode: cloudKind ? 'cloud' : 'local',
+  backend: cloudKind,
+  user: null,
   online: typeof navigator === 'undefined' ? true : navigator.onLine,
   phase: 'idle',
   pending: 0,
@@ -102,6 +104,7 @@ async function flushLocal() {
 }
 
 const ts = (s: string) => Date.parse(s) || 0;
+const message = (e: unknown, fallback: string) => (e instanceof Error ? e.message : (e as { message?: string })?.message || fallback);
 
 // ---------------------------------------------------------------- cloud sync
 
@@ -109,26 +112,15 @@ let flushTimer: ReturnType<typeof setTimeout> | undefined;
 let retryDelay = 2000;
 let flushing = false;
 let flushAgain = false;
-let channel: RealtimeChannel | null = null;
+let unsubscribeLive: (() => void) | null = null;
+let liveReady = false;
 
-const canSync = () => !!supabase && !!sync.session && sync.online;
+const canSync = () => !!backend && !!sync.user && sync.online;
 
 function scheduleFlush(delay = 600) {
   clearTimeout(flushTimer);
   flushTimer = setTimeout(flush, delay);
 }
-
-const toRow = (d: DocRecord) => ({
-  id: d.id,
-  type: d.type,
-  number: d.number,
-  year: d.year,
-  seq: d.seq,
-  data: d.data,
-  deleted: d.deleted,
-  created_at: d.created_at,
-  updated_at: d.updated_at,
-});
 
 async function flush() {
   if (!canSync()) return;
@@ -145,30 +137,26 @@ async function flush() {
         outbox.delete(id);
         continue;
       }
-      const row = toRow(doc);
-      const { error } = await supabase!.from('documents').upsert(row);
-      if (error?.code === '23505') {
+      const sent = doc.updated_at;
+      if ((await backend!.putDoc(doc)) === 'taken') {
         // Another device took this number while we were offline: move to the next free one.
         await renumber(doc);
         flushAgain = true;
         continue;
       }
-      if (error) throw error;
       // Only clear if nothing was edited while the request was in flight.
-      if (docs.get(id)?.updated_at === row.updated_at) outbox.delete(id);
+      if (docs.get(id)?.updated_at === sent) outbox.delete(id);
     }
     if (settingsDirty) {
       const sent = settings.updated_at;
-      const { error } = await supabase!.from('settings').upsert({ id: 'company', data: settings, updated_at: sent });
-      if (error) throw error;
+      await backend!.putSettings(settings);
       if (settings.updated_at === sent) settingsDirty = false;
     }
     await flushLocal();
     retryDelay = 2000;
     setSync({ phase: 'idle', error: null, lastSynced: new Date().toISOString() });
   } catch (e) {
-    const msg = e instanceof Error ? e.message : (e as { message?: string })?.message || 'Sync failed';
-    setSync({ phase: 'error', error: msg });
+    setSync({ phase: 'error', error: message(e, 'Sync failed') });
     scheduleFlush(retryDelay);
     retryDelay = Math.min(retryDelay * 2, 60000);
   } finally {
@@ -181,14 +169,7 @@ async function flush() {
 }
 
 async function renumber(doc: DocRecord) {
-  const { data } = await supabase!
-    .from('documents')
-    .select('seq')
-    .eq('type', doc.type)
-    .eq('year', doc.year)
-    .order('seq', { ascending: false })
-    .limit(1);
-  const seq = Math.max(data?.[0]?.seq ?? 0, localMaxSeq(doc.type, doc.year)) + 1;
+  const seq = Math.max(await backend!.maxSeq(doc.type, doc.year), localMaxSeq(doc.type, doc.year)) + 1;
   write({ ...doc, seq, number: docNumber(settings.prefix, doc.type, doc.year, seq) });
 }
 
@@ -201,7 +182,7 @@ function mergeRemote(row: DocRecord) {
   return true;
 }
 
-function mergeRemoteSettings(row: { data: Settings; updated_at: string }) {
+function mergeRemoteSettings(row: RemoteSettings) {
   if (ts(row.updated_at) <= ts(settings.updated_at)) return false;
   settings = { ...DEFAULT_SETTINGS, ...row.data, updated_at: row.updated_at };
   settingsDirty = false;
@@ -209,45 +190,49 @@ function mergeRemoteSettings(row: { data: Settings; updated_at: string }) {
   return true;
 }
 
-async function pull() {
+/**
+ * Full download. Firebase's live subscription already delivers everything and catches up by itself after a
+ * reconnect, so there this only pushes pending changes unless `force` is set (the "Sync now" button).
+ */
+async function pull(force = false) {
   if (!canSync()) return;
+  if (backend!.liveIncludesSnapshot && liveReady && !force) {
+    if (outbox.size || settingsDirty) scheduleFlush(0);
+    return;
+  }
   setSync({ phase: 'syncing' });
   try {
-    const page = 1000;
-    for (let from = 0; ; from += page) {
-      const { data, error } = await supabase!.from('documents').select('*').order('created_at').range(from, from + page - 1);
-      if (error) throw error;
-      data.forEach((r) => mergeRemote(r as DocRecord));
-      if (data.length < page) break;
-    }
-    const { data: s, error } = await supabase!.from('settings').select('*').eq('id', 'company').maybeSingle();
-    if (error) throw error;
-    if (s) mergeRemoteSettings(s);
+    const remote = await backend!.pullAll();
+    remote.docs.forEach(mergeRemote);
+    if (remote.settings) mergeRemoteSettings(remote.settings);
     setSync({ phase: 'idle', error: null, lastSynced: new Date().toISOString() });
     if (outbox.size || settingsDirty) scheduleFlush(0);
   } catch (e) {
-    setSync({ phase: 'error', error: (e as { message?: string })?.message || 'Could not reach the database' });
+    setSync({ phase: 'error', error: message(e, 'Could not reach the database') });
   }
 }
 
-function startRealtime() {
-  if (!supabase || channel) return;
-  channel = supabase
-    .channel('doc-hub')
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'documents' }, (p) => {
-      if (p.new && 'id' in p.new && mergeRemote(p.new as DocRecord)) emit();
-    })
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'settings' }, (p) => {
-      if (p.new && 'data' in p.new && mergeRemoteSettings(p.new as { data: Settings; updated_at: string })) emit();
-    })
-    .subscribe((status) => {
-      if (status === 'SUBSCRIBED') pull();
-    });
+function startLive() {
+  if (!backend || unsubscribeLive) return;
+  liveReady = false;
+  unsubscribeLive = backend.subscribe({
+    doc: (d) => mergeRemote(d) && emit(),
+    settings: (s) => mergeRemoteSettings(s) && emit(),
+    ready: () => {
+      liveReady = true;
+      if (backend!.liveIncludesSnapshot) {
+        setSync({ phase: 'idle', error: null, lastSynced: new Date().toISOString() });
+        if (outbox.size || settingsDirty) scheduleFlush(0);
+      } else pull();
+    },
+    error: (e) => setSync({ phase: 'error', error: e.message }),
+  });
 }
 
-function stopRealtime() {
-  if (channel) supabase?.removeChannel(channel);
-  channel = null;
+function stopLive() {
+  unsubscribeLive?.();
+  unsubscribeLive = null;
+  liveReady = false;
 }
 
 // ---------------------------------------------------------------- init
@@ -280,19 +265,30 @@ export async function init() {
   });
   window.addEventListener('pagehide', () => flushLocal());
 
-  if (supabase) {
-    const { data } = await supabase.auth.getSession();
-    sync = { ...sync, session: data.session };
-    supabase.auth.onAuthStateChange((_event, session) => {
-      const was = sync.session?.user.id;
-      setSync({ session });
-      if (session && session.user.id !== was) {
-        startRealtime();
-        pull();
-      }
-      if (!session) stopRealtime();
+  try {
+    backend = await loadBackend();
+  } catch (e) {
+    sync = { ...sync, phase: 'error', error: message(e, 'Could not start sync') };
+  }
+  if (backend) {
+    // First time this device talks to this Firebase project (e.g. moving from local-only mode): queue
+    // everything it has. Firebase only keeps an upload if it's newer than the cloud copy, so this is safe.
+    if (backend.kind === 'firebase' && (await get<string>('cloudTarget', metaDb)) !== cloudTarget) {
+      docs.forEach((_, id) => outbox.add(id));
+      if (ts(settings.updated_at) > 0) settingsDirty = true;
+      await set('outbox', [...outbox], metaDb);
+      await set('settingsDirty', settingsDirty, metaDb);
+      await set('cloudTarget', cloudTarget, metaDb);
+    }
+    const user = await backend.currentUser().catch(() => null);
+    sync = { ...sync, user };
+    backend.onAuthChange((next) => {
+      const was = sync.user?.id;
+      setSync({ user: next });
+      if (next && next.id !== was) startLive();
+      if (!next) stopLive();
     });
-    if (data.session) startRealtime();
+    if (user) startLive();
   }
   setSync({ ready: true });
 }
@@ -329,6 +325,7 @@ export function blankData(type: DocType): DocData {
     authorizedName: settings.authorizedName,
     includeCover: true,
     status: 'draft',
+    signatures: {},
   };
 }
 
@@ -370,7 +367,7 @@ export function deleteDoc(id: string) {
   if (doc) write({ ...doc, deleted: true });
 }
 
-/** Copies a document into another type, e.g. an accepted quotation into an invoice. */
+/** Copies a document into another type, e.g. an accepted quotation into an invoice. Signatures don't carry over. */
 export function convertDoc(id: string, type: DocType) {
   const src = docs.get(id);
   if (!src) return null;
@@ -395,20 +392,19 @@ export function updateSettings(patch: Partial<Settings>) {
   scheduleFlush();
 }
 
-export const syncNow = () => pull().then(flush);
+export const syncNow = () => pull(true).then(flush);
 
 // ---------------------------------------------------------------- auth
 
 export async function signIn(email: string, password: string) {
-  if (!supabase) throw new Error('Cloud sync is not configured');
-  const { error } = await supabase.auth.signInWithPassword({ email, password });
-  if (error) throw error;
+  if (!backend) throw new Error('Cloud sync is not configured');
+  await backend.signIn(email, password);
 }
 
 /** Signs out and wipes this device's copy so the next person can't see it. */
 export async function signOut() {
-  await supabase?.auth.signOut();
-  stopRealtime();
+  await backend?.signOut();
+  stopLive();
   docs.clear();
   outbox.clear();
   settingsDirty = false;

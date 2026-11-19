@@ -1,7 +1,8 @@
 import { Circle, Document, Image, Page, Path, Rect, StyleSheet, Svg, Text, View } from '@react-pdf/renderer';
+import type { ReactNode } from 'react';
 import logoArt from '../assets/logo-art.png';
-import { fmtDateLong, fmtDateShort, fmtMoney, rowTotal, totals } from '../lib/format';
-import { DOC_META, type DocRecord, type Settings } from '../lib/types';
+import { fmtDateLong, fmtDateShort, fmtDateTime, fmtMoney, rowTotal, totals } from '../lib/format';
+import { DOC_META, type DocRecord, type Settings, type Signature } from '../lib/types';
 import { C, F } from './theme';
 
 const LOGO_W = 1055;
@@ -12,6 +13,42 @@ const s = StyleSheet.create({
   label: { fontFamily: F.brand, fontWeight: 700, fontSize: 6.5, letterSpacing: 1.6, color: C.muted, textTransform: 'uppercase' },
   row: { flexDirection: 'row' },
 });
+
+// ------------------------------------------------------------------ wrapping long codes
+
+const LONG = 14;
+const CHUNK = 6;
+const SEPARATORS = /[^-/\\_.,:;|+=&)\]}]*[-/\\_.,:;|+=&)\]}]+|[^-/\\_.,:;|+=&)\]}]+$/g;
+
+/**
+ * The PDF engine only wraps at spaces, so a long part number, LPO reference or email ran straight out of its
+ * table cell. This adds break points inside words longer than LONG characters: after - / _ . , : ; and similar,
+ * and every CHUNK characters in longer unbroken runs. Each break point is a space set at 0.1pt, which is
+ * invisible but lets the line wrap there without the engine adding a hyphen, so codes read exactly as typed.
+ */
+function breakable(text: string): ReactNode {
+  if (!/\S{15,}/.test(text)) return text;
+  const out: ReactNode[] = [];
+  for (const piece of text.split(/(\s+)/)) {
+    if (piece.length <= LONG) {
+      out.push(piece);
+      continue;
+    }
+    const parts = (piece.match(SEPARATORS) ?? [piece]).flatMap((t) =>
+      t.length <= LONG ? [t] : Array.from({ length: Math.ceil(t.length / CHUNK) }, (_, i) => t.slice(i * CHUNK, (i + 1) * CHUNK)),
+    );
+    parts.forEach((p, i) => {
+      if (i)
+        out.push(
+          <Text key={out.length} style={{ fontSize: 0.1 }}>
+            {' '}
+          </Text>,
+        );
+      out.push(p);
+    });
+  }
+  return out;
+}
 
 // ------------------------------------------------------------------ logo
 
@@ -119,7 +156,9 @@ function Cover({ doc, co }: { doc: DocRecord; co: Settings }) {
           ].map((m, i) => (
             <View key={m.k} style={{ flex: i === 0 ? 1.4 : 1, paddingLeft: i ? 14 : 0, borderLeftWidth: i ? 0.6 : 0, borderLeftColor: C.hair }}>
               <Text style={s.label}>{m.k}</Text>
-              <Text style={{ marginTop: 5, fontSize: 9.5, fontWeight: 600, color: C.ink }}>{m.v}</Text>
+              <Text style={{ marginTop: 5, fontSize: 9.5, fontWeight: 600, color: C.ink }}>
+                {breakable(m.v)}
+              </Text>
             </View>
           ))}
         </View>
@@ -195,13 +234,15 @@ function Recipient({ doc }: { doc: DocRecord }) {
     >
       <View style={{ flex: 1, paddingRight: 20 }}>
         <Text style={s.label}>To</Text>
-        <Text style={{ marginTop: 5, fontSize: 10.5, fontWeight: 600, color: C.ink }}>{d.to || '—'}</Text>
+        <Text style={{ marginTop: 5, fontSize: 10.5, fontWeight: 600, color: C.ink }}>
+          {breakable(d.to) || '—'}
+        </Text>
         {d.toAddress
           .split('\n')
           .filter((l) => l.trim())
           .map((l, i) => (
             <Text key={i} style={{ fontSize: 8.5, color: C.body, marginTop: 2 }}>
-              {l}
+              {breakable(l)}
             </Text>
           ))}
       </View>
@@ -294,51 +335,110 @@ function Totals({ doc }: { doc: DocRecord }) {
   );
 }
 
-function SignLine({ label, value, strong }: { label: string; value?: string; strong?: boolean }) {
+/** A hand-drawn signature, scaled into the given box and sitting on its baseline, drawn with a ~1pt pen. */
+function SignatureMark({ sig, width, height }: { sig: Signature; width: number; height: number }) {
+  const [x, y, w, h] = sig.box;
+  const pen = 1.05 * Math.max(w / width, h / height);
+  return (
+    <Svg viewBox={`${x} ${y} ${w} ${h}`} width={width} height={height} preserveAspectRatio="xMinYMax meet">
+      {sig.paths.map((d, i) => (
+        <Path key={i} d={d} stroke={C.ink} strokeWidth={pen} fill="none" strokeLinecap="round" strokeLinejoin="round" />
+      ))}
+    </Svg>
+  );
+}
+
+const RULE = '#B9BDC5';
+
+function SignedNote({ sig, prefix = 'Signed in person' }: { sig: Signature; prefix?: string }) {
+  return (
+    <Text style={{ marginTop: 3, fontSize: 6.2, color: C.muted }}>
+      {prefix} · {fmtDateTime(sig.signedAt)}
+    </Text>
+  );
+}
+
+function SignLine({ label, value, strong, sig }: { label: string; value?: string; strong?: boolean; sig?: Signature }) {
   return (
     <View style={{ marginBottom: 16 }}>
       <Text style={s.label}>{label}</Text>
       <View
-        style={{ height: 24, justifyContent: 'flex-end', borderBottomWidth: strong ? 1 : 0.7, borderBottomColor: strong ? C.ink : '#B9BDC5', paddingBottom: 3 }}
+        style={{
+          height: sig ? 46 : 24,
+          justifyContent: 'flex-end',
+          borderBottomWidth: strong ? 1 : 0.7,
+          borderBottomColor: strong ? C.ink : RULE,
+          paddingBottom: sig ? 1 : 3,
+        }}
       >
-        {value ? <Text style={{ fontSize: 9.5, fontWeight: 600, color: C.ink }}>{value}</Text> : null}
+        {sig ? <SignatureMark sig={sig} width={180} height={42} /> : value ? <Text style={{ fontSize: 9.5, fontWeight: 600, color: C.ink }}>{value}</Text> : null}
       </View>
+      {sig && <SignedNote sig={sig} />}
+    </View>
+  );
+}
+
+/** Delivery notes: who received the goods. Blank lines to sign on paper, or the signature captured on the device. */
+function ReceivedBy({ sig }: { sig?: Signature }) {
+  const field = (label: string, value: string | undefined, style: object) => (
+    <View style={{ ...s.row, alignItems: 'flex-end', ...style }}>
+      <Text style={{ fontSize: 9, color: C.body }}>{label}</Text>
+      <View style={{ flex: 1, marginLeft: 6, borderBottomWidth: 0.7, borderBottomColor: RULE, paddingBottom: 2, minHeight: 13 }}>
+        {value ? <Text style={{ fontSize: 9, fontWeight: 600, color: C.ink }}>{breakable(value)}</Text> : null}
+      </View>
+    </View>
+  );
+  return (
+    <View style={{ marginTop: 16 }}>
+      <Text style={s.label}>Received by</Text>
+      <View style={{ ...s.row, marginTop: 8 }}>
+        {field('Name:', sig?.name, { flex: 1, marginRight: 12 })}
+        {field('Date:', sig ? new Date(sig.signedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : undefined, { width: 104 })}
+      </View>
+      <View style={{ ...s.row, alignItems: 'flex-end', marginTop: 10 }}>
+        <Text style={{ fontSize: 9, color: C.body }}>Signature:</Text>
+        <View style={{ flex: 1, marginLeft: 6, height: sig ? 40 : 16, justifyContent: 'flex-end', borderBottomWidth: 0.7, borderBottomColor: RULE }}>
+          {sig ? <SignatureMark sig={sig} width={160} height={38} /> : null}
+        </View>
+      </View>
+      {sig && <SignedNote sig={sig} prefix="Signed in person on delivery" />}
     </View>
   );
 }
 
 function Closing({ doc, co }: { doc: DocRecord; co: Settings }) {
   const d = doc.data;
+  const sigs = d.signatures ?? {};
   return (
     <View style={{ ...s.row, marginTop: 30, alignItems: 'flex-end' }} wrap={false}>
       <View style={{ flex: 1, paddingRight: 34 }}>
-        {d.notes ? <Text style={{ fontSize: 9, lineHeight: 1.6, color: C.body }}>{d.notes}</Text> : null}
+        {d.notes ? <Text style={{ fontSize: 9, lineHeight: 1.6, color: C.body }}>{breakable(d.notes)}</Text> : null}
         {doc.type === 'invoice' && co.paymentDetails ? (
           <View style={{ marginTop: 10, padding: 10, backgroundColor: C.ivory, borderRadius: 3 }}>
             <Text style={s.label}>Payment details</Text>
-            <Text style={{ marginTop: 4, fontSize: 8.5, lineHeight: 1.5, color: C.ink }}>{co.paymentDetails}</Text>
+            <Text style={{ marginTop: 4, fontSize: 8.5, lineHeight: 1.5, color: C.ink }}>{breakable(co.paymentDetails)}</Text>
           </View>
         ) : null}
         {doc.type === 'quotation' && (
           <View style={{ marginTop: 14 }}>
-            <Text style={{ fontSize: 9, color: C.body }}>To accept this quotation, sign here and return:</Text>
-            <View style={{ width: 190, marginTop: 22, borderBottomWidth: 0.7, borderBottomColor: '#B9BDC5' }} />
+            <Text style={{ fontSize: 9, color: C.body }}>
+              {sigs.client ? `Accepted by ${sigs.client.name}:` : 'To accept this quotation, sign here and return:'}
+            </Text>
+            <View style={{ width: 190, height: sigs.client ? 44 : 22, justifyContent: 'flex-end', borderBottomWidth: 0.7, borderBottomColor: RULE }}>
+              {sigs.client ? <SignatureMark sig={sigs.client} width={170} height={40} /> : null}
+            </View>
+            {sigs.client && <SignedNote sig={sigs.client} />}
           </View>
         )}
-        {doc.type === 'delivery' && (
-          <View style={{ ...s.row, alignItems: 'flex-end', marginTop: 16 }}>
-            <Text style={{ fontSize: 9, color: C.body }}>Receiver&apos;s Signature:</Text>
-            <View style={{ flex: 1, marginLeft: 8, borderBottomWidth: 0.7, borderBottomColor: '#B9BDC5' }} />
-          </View>
-        )}
+        {doc.type === 'delivery' && <ReceivedBy sig={sigs.receiver} />}
         {doc.type === 'statement' && co.signOff ? (
           <Text style={{ fontFamily: F.brand, fontWeight: 700, fontSize: 9, letterSpacing: 1.5, color: C.ink }}>{co.signOff}</Text>
         ) : null}
         <Text style={{ fontFamily: F.brand, fontWeight: 700, fontSize: 7, letterSpacing: 1.8, color: C.ink, marginTop: 18 }}>THANK YOU FOR YOUR BUSINESS!</Text>
       </View>
       <View style={{ width: 186 }}>
-        <SignLine label="Authorized name" value={d.authorizedName} />
-        <SignLine label="Authorized signature" strong />
+        <SignLine label="Authorized name" value={d.authorizedName || sigs.authorized?.name} />
+        <SignLine label="Authorized signature" strong sig={sigs.authorized} />
       </View>
     </View>
   );
@@ -394,9 +494,16 @@ function ItemsTable({ doc }: { doc: DocRecord }) {
       <View>
         <TableHead cols={cols} />
         {items.map((it) => (
-          <View key={it.id} style={{ ...s.row, alignItems: 'flex-start', paddingVertical: 10, borderBottomWidth: 0.6, borderBottomColor: C.hair }} wrap={false}>
+          // A row stays whole on one page unless its description is long enough to need splitting.
+          <View
+            key={it.id}
+            style={{ ...s.row, alignItems: 'flex-start', paddingVertical: 10, borderBottomWidth: 0.6, borderBottomColor: C.hair }}
+            wrap={it.description.length > 700}
+          >
             <Text style={{ width: 40, textAlign: 'center', paddingHorizontal: 4, color: C.ink }}>{it.qty}</Text>
-            <Text style={{ flex: 1, paddingHorizontal: 4, fontSize: 9, lineHeight: 1.5, color: C.body }}>{it.description}</Text>
+            <Text style={{ flex: 1, minWidth: 0, paddingHorizontal: 4, fontSize: 9, lineHeight: 1.5, color: C.body }}>
+              {breakable(it.description)}
+            </Text>
             {priced && <Text style={{ width: 84, textAlign: 'right', paddingHorizontal: 4, color: C.body }}>{fmtMoney(it.unitPrice)}</Text>}
             {priced && (
               <Text style={{ width: 92, textAlign: 'right', paddingHorizontal: 4, fontWeight: 600, color: C.ink }}>{fmtMoney(it.qty * it.unitPrice)}</Text>
@@ -435,9 +542,15 @@ function StatementTable({ doc }: { doc: DocRecord }) {
             wrap={false}
           >
             <Text style={{ ...cell, width: 60 }}>{fmtDateShort(r.date)}</Text>
-            <Text style={{ ...cell, width: 66 }}>{r.lpo}</Text>
-            <Text style={{ ...cell, width: 66 }}>{r.invoiceNo}</Text>
-            <Text style={{ ...cell, width: 62 }}>{r.deliveryNo}</Text>
+            <Text style={{ ...cell, width: 66 }}>
+              {breakable(r.lpo)}
+            </Text>
+            <Text style={{ ...cell, width: 66 }}>
+              {breakable(r.invoiceNo)}
+            </Text>
+            <Text style={{ ...cell, width: 62 }}>
+              {breakable(r.deliveryNo)}
+            </Text>
             <Text style={{ ...cell, flex: 1, textAlign: 'right' }}>{fmtMoney(r.amount)}</Text>
             <Text style={{ ...cell, width: 62, textAlign: 'right' }}>{fmtMoney(r.vat)}</Text>
             <Text style={{ ...cell, width: 74, textAlign: 'right', fontWeight: 600, color: C.ink }}>{fmtMoney(rowTotal(r))}</Text>

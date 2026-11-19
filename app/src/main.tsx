@@ -4,7 +4,11 @@ import { registerSW } from 'virtual:pwa-register';
 import { App } from './App';
 import { isNativeApp } from './lib/platform';
 import { init } from './lib/store';
+import { initTheme } from './lib/theme';
 import './index.css';
+
+// Set the colour theme before the first paint so there's no flash.
+initTheme();
 
 // The installed apps ship their files inside the installer, so only the website needs the offline worker.
 if (!isNativeApp) registerSW({ immediate: true });
